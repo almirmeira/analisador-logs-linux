@@ -37,7 +37,9 @@ Automatizar a coleta e análise de eventos de autenticação no Linux a partir d
 Execute um terminal bash
 
 git clone https://github.com/almirmeira/analisador-logs-linux.git
+
 cd analisador-logs-linux
+
 chmod +x analisador.sh
 
 ▶️ Execução padrão
