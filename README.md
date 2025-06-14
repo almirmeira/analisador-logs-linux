@@ -80,6 +80,7 @@ Sugestões e pull requests são muito bem-vindos!
 
 👨🏽‍💻 Autor
 Almir Meira
+
 🔗 github.com/almirmeira
 
 📜 Licença
