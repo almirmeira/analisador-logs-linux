@@ -57,6 +57,7 @@ chmod +x analisador.sh
 ▶️ Com envio de relatório
 
 EMAIL_DEST=seu@email.com ./analisador.sh
+
 API_URL="https://suaapi.com/post" ./analisador.sh
 
 📁 Saídas
@@ -67,9 +68,9 @@ relatorio_autenticacao.json → Versão estruturada para integrações
 
 🔒 Considerações de Segurança
 
-O script não realiza modificações no sistema.
-Apenas lê e processa logs.
-Requer privilégios para ler arquivos protegidos (use sudo se necessário).
+- O script não realiza modificações no sistema.
+- Apenas lê e processa logs.
+- Requer privilégios para ler arquivos protegidos (use sudo se necessário).
 
 🙌 Contribuições
 Sinta-se à vontade para abrir issues, enviar pull requests ou sugerir melhorias como:
