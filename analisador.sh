@@ -1,71 +1,46 @@
 #!/bin/bash
-# analisador.sh - Analisador simples de logs de autenticação Linux
+# analisador.sh - Logins locais e via SSH no Ubuntu (auth.log)
 
 LOG_DIR="/var/log"
 AUTH_LOG="$LOG_DIR/auth.log"
-SECURE_LOG="$LOG_DIR/secure"
-OUTPUT_TXT="relatorio_autenticacao.txt"
-OUTPUT_JSON="relatorio_autenticacao.json"
-DATA_FILTRO=""
-IP_FILTRO=""
+OUTPUT_FILE="relatorio_autenticacao.txt"
 
-# Verifica argumentos
-while getopts "d:i:" opt; do
-  case ${opt} in
-    d ) DATA_FILTRO=$OPTARG ;;
-    i ) IP_FILTRO=$OPTARG ;;
-    \? ) echo "Uso: cmd [-d AAAA-MM-DD] [-i IP]"; exit 1 ;;
-  esac
-done
+echo "==========================================" > $OUTPUT_FILE
+echo "RELATÓRIO DE AUTENTICAÇÃO - $(date)" >> $OUTPUT_FILE
+echo "==========================================" >> $OUTPUT_FILE
 
-# Detectar qual log está presente
-if [[ -f "$AUTH_LOG" ]]; then
-    LOGFILE=$AUTH_LOG
-elif [[ -f "$SECURE_LOG" ]]; then
-    LOGFILE=$SECURE_LOG
-else
-    echo "Arquivo de log não encontrado."; exit 1
+if [[ ! -f "$AUTH_LOG" ]]; then
+    echo "Arquivo $AUTH_LOG não encontrado."
+    exit 1
 fi
 
-# Filtro de data/IP se presente
-FILTRO_CMD="cat $LOGFILE"
-if [[ $DATA_FILTRO != "" ]]; then
-    FILTRO_CMD="$FILTRO_CMD | grep \"$DATA_FILTRO\""
-fi
-if [[ $IP_FILTRO != "" ]]; then
-    FILTRO_CMD="$FILTRO_CMD | grep \"$IP_FILTRO\""
-fi
+# SSH: Logins mal sucedidos
+echo -e "\n[1] SSH - TENTATIVAS DE LOGIN INVÁLIDAS:" >> $OUTPUT_FILE
+grep "Failed password" $AUTH_LOG | awk '{print $1, $2, $3, "Usuário:", $11, "IP:", $13}' | sort | uniq -c >> $OUTPUT_FILE
 
-LOGS_FILTRADOS=$(eval $FILTRO_CMD)
+# SSH: Logins bem sucedidos
+echo -e "\n[2] SSH - LOGINS BEM SUCEDIDOS:" >> $OUTPUT_FILE
+grep "Accepted password" $AUTH_LOG | awk '{print $1, $2, $3, "Usuário:", $9, "IP:", $11}' | sort | uniq -c >> $OUTPUT_FILE
 
-# Gerar saída TXT
-echo "Relatório de autenticação - $(date)" > $OUTPUT_TXT
-echo "[DATA: $DATA_FILTRO] [IP: $IP_FILTRO]" >> $OUTPUT_TXT
+# Sessões locais abertas (gdm, tty, su, sudo)
+echo -e "\n[3] SESSÕES ABERTAS (local + remoto):" >> $OUTPUT_FILE
+grep "session opened for user" $AUTH_LOG | awk '{print $1, $2, $3, "Usuário:", $11, "Por:", $13}' | sort >> $OUTPUT_FILE
 
-echo -e "\n[1] Logins mal sucedidos:" >> $OUTPUT_TXT
-echo "$LOGS_FILTRADOS" | grep "Failed password" | awk '{print $1, $2, $3, $11, $13}' | sort | uniq -c >> $OUTPUT_TXT
+# Sessões locais encerradas
+echo -e "\n[4] SESSÕES ENCERRADAS:" >> $OUTPUT_FILE
+grep "session closed for user" $AUTH_LOG | awk '{print $1, $2, $3, "Usuário:", $11}' | sort >> $OUTPUT_FILE
 
-echo -e "\n[2] Logins bem sucedidos:" >> $OUTPUT_TXT
-echo "$LOGS_FILTRADOS" | grep "Accepted password" | awk '{print $1, $2, $3, $9, $11}' | sort | uniq -c >> $OUTPUT_TXT
+# Uso do sudo
+echo -e "\n[5] USO DO SUDO:" >> $OUTPUT_FILE
+grep "sudo" $AUTH_LOG | grep "COMMAND=" | awk '{print $1, $2, $3, "Usuário:", $9, "Comando:", $15}' | sort >> $OUTPUT_FILE
 
-# Exportar para JSON simples
-echo "{" > $OUTPUT_JSON
-echo "  \"data_filtro\": \"$DATA_FILTRO\"," >> $OUTPUT_JSON
-echo "  \"ip_filtro\": \"$IP_FILTRO\"," >> $OUTPUT_JSON
-echo "  \"logins_falhos\": [" >> $OUTPUT_JSON
-echo "$LOGS_FILTRADOS" | grep "Failed password" | awk -F' ' '{printf "    {\"data\":\"%s %s %s\", \"usuario\":\"%s\", \"ip\":\"%s\"},\n", $1,$2,$3,$11,$13}' | sed '$ s/,$//' >> $OUTPUT_JSON
-echo "  ]," >> $OUTPUT_JSON
-echo "  \"logins_sucesso\": [" >> $OUTPUT_JSON
-echo "$LOGS_FILTRADOS" | grep "Accepted password" | awk -F' ' '{printf "    {\"data\":\"%s %s %s\", \"usuario\":\"%s\", \"ip\":\"%s\"},\n", $1,$2,$3,$9,$11}' | sed '$ s/,$//' >> $OUTPUT_JSON
-echo "  ]" >> $OUTPUT_JSON
-echo "}" >> $OUTPUT_JSON
+# Uso do su
+echo -e "\n[6] USO DO SU (troca de usuário):" >> $OUTPUT_FILE
+grep "su:" $AUTH_LOG | grep "session opened" | awk '{print $1, $2, $3, "SU iniciado por:", $11}' | sort >> $OUTPUT_FILE
 
-echo "Relatórios salvos em: $OUTPUT_TXT e $OUTPUT_JSON"
+# Falhas de autenticação (PAM)
+echo -e "\n[7] FALHAS DE AUTENTICAÇÃO (PAM):" >> $OUTPUT_FILE
+grep "authentication failure" $AUTH_LOG | awk '{print $1, $2, $3, $NF}' | sort >> $OUTPUT_FILE
 
-# Opcional: Enviar por e-mail ou API
-if [[ -n "$EMAIL_DEST" ]]; then
-    mail -s "Relatório de autenticação Linux" "$EMAIL_DEST" < $OUTPUT_TXT
-fi
-if [[ -n "$API_URL" ]]; then
-    curl -X POST -H "Content-Type: application/json" -d @"$OUTPUT_JSON" "$API_URL"
-fi
+echo -e "\n[✓] Relatório salvo em $OUTPUT_FILE"
+
