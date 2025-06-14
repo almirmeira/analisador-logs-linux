@@ -1,83 +1,71 @@
-🛡️ ANALISADOR DE LOGS LINUX - UMA SOLUÇÃO SIMPLES
+#!/bin/bash
+# analisador.sh - Analisador simples de logs de autenticação Linux
 
-> Ferramenta simples, modular e poderosa para análise de logs de autenticação no Linux. Ideal para SOCs, sysadmins, analistas de segurança e estudantes da área.
+LOG_DIR="/var/log"
+AUTH_LOG="$LOG_DIR/auth.log"
+SECURE_LOG="$LOG_DIR/secure"
+OUTPUT_TXT="relatorio_autenticacao.txt"
+OUTPUT_JSON="relatorio_autenticacao.json"
+DATA_FILTRO=""
+IP_FILTRO=""
 
----
+# Verifica argumentos
+while getopts "d:i:" opt; do
+  case ${opt} in
+    d ) DATA_FILTRO=$OPTARG ;;
+    i ) IP_FILTRO=$OPTARG ;;
+    \? ) echo "Uso: cmd [-d AAAA-MM-DD] [-i IP]"; exit 1 ;;
+  esac
+done
 
-🎯 Objetivo
+# Detectar qual log está presente
+if [[ -f "$AUTH_LOG" ]]; then
+    LOGFILE=$AUTH_LOG
+elif [[ -f "$SECURE_LOG" ]]; then
+    LOGFILE=$SECURE_LOG
+else
+    echo "Arquivo de log não encontrado."; exit 1
+fi
 
-Automatizar a coleta e análise de eventos de autenticação no Linux a partir dos arquivos de log (`/var/log/auth.log` ou `/var/log/secure`), oferecendo visibilidade rápida de:
+# Filtro de data/IP se presente
+FILTRO_CMD="cat $LOGFILE"
+if [[ $DATA_FILTRO != "" ]]; then
+    FILTRO_CMD="$FILTRO_CMD | grep \"$DATA_FILTRO\""
+fi
+if [[ $IP_FILTRO != "" ]]; then
+    FILTRO_CMD="$FILTRO_CMD | grep \"$IP_FILTRO\""
+fi
 
-- Tentativas de login mal-sucedidas
-- Logins bem-sucedidos
-- Uso de `sudo`
-- Sessões SSH iniciadas
+LOGS_FILTRADOS=$(eval $FILTRO_CMD)
 
----
+# Gerar saída TXT
+echo "Relatório de autenticação - $(date)" > $OUTPUT_TXT
+echo "[DATA: $DATA_FILTRO] [IP: $IP_FILTRO]" >> $OUTPUT_TXT
 
-🚀 Funcionalidades
+echo -e "\n[1] Logins mal sucedidos:" >> $OUTPUT_TXT
+echo "$LOGS_FILTRADOS" | grep "Failed password" | awk '{print $1, $2, $3, $11, $13}' | sort | uniq -c >> $OUTPUT_TXT
 
-- 🔍 **Filtro por data e/ou IP**
-- 📄 **Geração de relatório em texto**
-- 📦 **Exportação em JSON estruturado**
-- 📧 **Envio automático por e-mail ou para API externa**
+echo -e "\n[2] Logins bem sucedidos:" >> $OUTPUT_TXT
+echo "$LOGS_FILTRADOS" | grep "Accepted password" | awk '{print $1, $2, $3, $9, $11}' | sort | uniq -c >> $OUTPUT_TXT
 
----
+# Exportar para JSON simples
+echo "{" > $OUTPUT_JSON
+echo "  \"data_filtro\": \"$DATA_FILTRO\"," >> $OUTPUT_JSON
+echo "  \"ip_filtro\": \"$IP_FILTRO\"," >> $OUTPUT_JSON
+echo "  \"logins_falhos\": [" >> $OUTPUT_JSON
+echo "$LOGS_FILTRADOS" | grep "Failed password" | awk -F' ' '{printf "    {\"data\":\"%s %s %s\", \"usuario\":\"%s\", \"ip\":\"%s\"},\n", $1,$2,$3,$11,$13}' | sed '$ s/,$//' >> $OUTPUT_JSON
+echo "  ]," >> $OUTPUT_JSON
+echo "  \"logins_sucesso\": [" >> $OUTPUT_JSON
+echo "$LOGS_FILTRADOS" | grep "Accepted password" | awk -F' ' '{printf "    {\"data\":\"%s %s %s\", \"usuario\":\"%s\", \"ip\":\"%s\"},\n", $1,$2,$3,$9,$11}' | sed '$ s/,$//' >> $OUTPUT_JSON
+echo "  ]" >> $OUTPUT_JSON
+echo "}" >> $OUTPUT_JSON
 
-📦 Requisitos
+echo "Relatórios salvos em: $OUTPUT_TXT e $OUTPUT_JSON"
 
-- Linux com bash
-- Ferramentas padrão (`grep`, `awk`, `curl`, `mail` etc.)
-- Permissões para ler `/var/log/auth.log` ou `/var/log/secure`
-
----
-
-⚙️ Como usar
-
-Execute um terminal bash
-
-git clone https://github.com/almirmeira/analisador-logs-linux.git
-cd analisador-logs-linux
-chmod +x analisador.sh
-
-▶️ Execução padrão
-
-./analisador.sh
-
-▶️ Com filtro por data
-
-./analisador.sh -d "Jun 14"
-
-▶️ Com filtro por IP
-
-./analisador.sh -i "192.168"
-
-▶️ Com envio de relatório
-
-EMAIL_DEST=seu@email.com ./analisador.sh
-API_URL="https://suaapi.com/post" ./analisador.sh
-
-📁 Saídas
-
-relatorio_autenticacao.txt → Relatório legível em texto
-
-relatorio_autenticacao.json → Versão estruturada para integrações
-
-🔒 Considerações de Segurança
-
-O script não realiza modificações no sistema.
-Apenas lê e processa logs.
-Requer privilégios para ler arquivos protegidos (use sudo se necessário).
-
-🙌 Contribuições
-Sinta-se à vontade para abrir issues, enviar pull requests ou sugerir melhorias como:
-- Suporte a outros formatos de log (ex: journald)
-- Detecção de brute force
-- Integração com SIEMs
-
-👨🏽‍💻 Autor
-Almir Meira
-GitHub: @almirmeira
-
-📜 Licença
-Distribuído sob a licença MIT. Consulte LICENSE para mais informações.
+# Opcional: Enviar por e-mail ou API
+if [[ -n "$EMAIL_DEST" ]]; then
+    mail -s "Relatório de autenticação Linux" "$EMAIL_DEST" < $OUTPUT_TXT
+fi
+if [[ -n "$API_URL" ]]; then
+    curl -X POST -H "Content-Type: application/json" -d @"$OUTPUT_JSON" "$API_URL"
+fi
