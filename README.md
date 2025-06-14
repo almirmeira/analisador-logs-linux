@@ -50,12 +50,19 @@ cat relatorio_autenticacao.txt
 📁 Saída esperada
 
 Arquivo relatorio_autenticacao.txt com seções como:
+
 [1] SSH - TENTATIVAS DE LOGIN INVÁLIDAS:
+
 [2] SSH - LOGINS BEM SUCEDIDOS:
+
 [3] SESSÕES ABERTAS (local + remoto):
+
 [4] SESSÕES ENCERRADAS:
+
 [5] USO DO SUDO:
+
 [6] USO DO SU:
+
 [7] FALHAS DE AUTENTICAÇÃO (PAM):
 
 📌 Exemplo de aplicação
